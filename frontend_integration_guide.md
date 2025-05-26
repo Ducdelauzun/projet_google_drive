@@ -107,7 +107,3 @@ Le backend sera disponible en local sur `localhost:5000`, ou sur un réseau inte
 ## 🧪 Tests
 
 Utiliser Postman ou Swagger pour tester les routes pendant le dev. Le backend peut simuler des erreurs (ex : mauvaise authentification, fichier manquant, etc.)
-
----
-
-👉 N’hésite pas à me demander les exemples de réponses JSON ou des endpoints personnalisés si besoin.

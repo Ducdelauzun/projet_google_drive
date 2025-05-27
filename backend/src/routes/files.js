@@ -7,37 +7,66 @@ const verifyToken = require("../middlewares/authMiddleware");
 
 const router = express.Router();
 
-// Configuration de multer (dynamique par utilisateur)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const username = req.user.username;
-    const userFolder = path.join("/mnt/drive_data", username);
+const tempStorage = multer.memoryStorage();
+const tempUpload = multer({ storage: tempStorage }).array("file");
 
-    // Crée le dossier s’il n'existe pas
-    if (!fs.existsSync(userFolder)) {
-      fs.mkdirSync(userFolder, { recursive: true });
+const parseForm = multer().none();
+
+router.post("/upload", verifyToken, (req, res) => {
+  tempUpload(req, res, (uploadErr) => {
+    if (uploadErr) {
+      return res.status(400).json({ message: "Erreur upload", error: uploadErr.message });
     }
-
-    cb(null, userFolder);
-  },
-  filename: (req, file, cb) => {
-    // On garde le nom d’origine du fichier
-    cb(null, file.originalname);
-  },
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "Aucun fichier reçu" });
+    }
+    const username = req.user.username;
+    const relativePath = req.body.path || "";
+    const targetPath = path.join("/mnt/drive_data", username, relativePath);
+    try {
+      fs.mkdirSync(targetPath, { recursive: true });
+    } catch (mkdirErr) {
+      return res.status(500).json({ message: "Erreur création dossier", error: mkdirErr.message });
+    }
+    const uploadedFiles = [];
+    let errorDuringWrite = null;
+    req.files.forEach((file) => {
+      const filePath = path.join(targetPath, file.originalname);
+      try {
+        fs.writeFileSync(filePath, file.buffer);
+        uploadedFiles.push({ filename: file.originalname, path: filePath });
+      } catch (err) {
+        errorDuringWrite = err;
+      }
+    });
+    if (errorDuringWrite) {
+      return res.status(500).json({ message: "Erreur lors de l'écriture d'un ou plusieurs fichiers", error: errorDuringWrite.message });
+    }
+    res.status(201).json({
+      message: "Fichiers uploadés avec succès",
+      files: uploadedFiles
+    });
+  });
 });
 
-const upload = multer({ storage });
+// Création d'un dossier vide pour l'utilisateur connecté
+router.post("/mkdir", verifyToken, parseForm, (req, res) => {
+  const username = req.user.username;
+  const relativePath = req.body.path || "";
+  const targetPath = path.join("/mnt/drive_data", username, relativePath);
 
-router.post("/upload", verifyToken, upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "Aucun fichier fourni" });
+  try {
+    fs.mkdirSync(targetPath, { recursive: true });
+    res.status(201).json({
+      message: "Dossier créé avec succès",
+      path: targetPath,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Erreur lors de la création du dossier",
+      error: err.message,
+    });
   }
-
-  res.status(201).json({
-    message: "Fichier uploadé avec succès",
-    filename: req.file.originalname,
-    path: req.file.path,
-  });
 });
 
 // GET /api/files/list
